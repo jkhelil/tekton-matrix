@@ -14,12 +14,22 @@ spec:
     - name: output-image
       type: string
       description: Reference of the image the pipeline will produce.
-    - name: platforms
-      type: array
-      description: Target platforms for the image build.
-      default:
-        - linux/amd64
-        - linux/arm64
+    - name: amd64-platform
+      type: string
+      description: Platform to use for amd64 remote builds
+      default: linux/amd64
+    - name: arm64-platform
+      type: string
+      description: Platform to use for arm64 remote builds
+      default: linux/arm64
+    - name: ppc64le-platform
+      type: string
+      description: Platform to use for ppc64le remote builds
+      default: linux/ppc64le
+    - name: s390x-platform
+      type: string
+      description: Platform to use for s390x remote builds
+      default: linux/s390x
   workspaces:
     - name: shared
   tasks:
@@ -35,7 +45,6 @@ spec:
       workspaces:
         - name: output
           workspace: shared
-    
     - name: build-images
       runAfter:
         - git-clone
@@ -43,38 +52,37 @@ spec:
         kind: Task
         name: buildah
       matrix:
-        params:
-          - name: PLATFORM
-            value: $(params.platforms)
+        include:
+          # While this is possible to do, we build amd64 in-cluster instead.
+          #  In order to build amd64 remotely, uncomment this and disable
+          #  the in-cluster task by setting params.build-amd-in-cluster to false
+          # - name: amd64
+          #   params:
+          #     - name: IMAGE
+          #       value: $(params.output-image)-amd64
+          #     - name: PLATFORM
+          #       value: $(params.amd64-platform)
+          - name: arm64
+            params:
+              - name: IMAGE
+                value: $(params.output-image)-arm64
+              - name: PLATFORM
+                value: $(params.arm64-platform)
+          - name: ppc64le
+            params:
+              - name: IMAGE
+                value: $(params.output-image)-ppc64le
+              - name: PLATFORM
+                value: $(params.ppc64le-platform)
+          - name: s390x
+            params:
+              - name: IMAGE
+                value: $(params.output-image)-s390x
+              - name: PLATFORM
+                value: $(params.s390x-platform)
       params:
-        - name: IMAGE
-          value: $(params.output-image)
         - name: STORAGE_DRIVER
           value: vfs
       workspaces:
         - name: source
           workspace: shared
----
-apiVersion: tekton.dev/v1
-kind: PipelineRun
-metadata:
-  name: multi-arch-build-run
-spec:
-  pipelineRef:
-    name: multi-arch-build
-  params:
-    - name: git-repo
-      value: https://github.com/jkhelil/minimal-container
-    - name: git-revision
-      value: main
-    - name: output-image
-      value: quay.io/jkhelil/minimal-container-matrix1
-    - name: platforms
-      value:
-        - linux/amd64
-        - linux/arm64
-        - linux/arm/v7
-  workspaces:
-    - name: shared
-      persistentVolumeClaim:
-        claimName: tekton-build
