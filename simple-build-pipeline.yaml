@@ -1,7 +1,7 @@
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
-  name: multi-arch-build
+  name: simple-build-pipeline
 spec:
   params:
     - name: git-repo
@@ -14,22 +14,6 @@ spec:
     - name: output-image
       type: string
       description: Reference of the image the pipeline will produce.
-    - name: amd64-platform
-      type: string
-      description: Platform to use for amd64 remote builds
-      default: linux/amd64
-    - name: arm64-platform
-      type: string
-      description: Platform to use for arm64 remote builds
-      default: linux/arm64
-    - name: ppc64le-platform
-      type: string
-      description: Platform to use for ppc64le remote builds
-      default: linux/ppc64le
-    - name: s390x-platform
-      type: string
-      description: Platform to use for s390x remote builds
-      default: linux/s390x
   workspaces:
     - name: shared
   tasks:
@@ -52,37 +36,50 @@ spec:
         kind: Task
         name: buildah
       matrix:
-        include:
-          # While this is possible to do, we build amd64 in-cluster instead.
-          #  In order to build amd64 remotely, uncomment this and disable
-          #  the in-cluster task by setting params.build-amd-in-cluster to false
-          # - name: amd64
-          #   params:
-          #     - name: IMAGE
-          #       value: $(params.output-image)-amd64
-          #     - name: PLATFORM
-          #       value: $(params.amd64-platform)
-          - name: arm64
-            params:
-              - name: IMAGE
-                value: $(params.output-image)-arm64
-              - name: PLATFORM
-                value: $(params.arm64-platform)
-          - name: ppc64le
-            params:
-              - name: IMAGE
-                value: $(params.output-image)-ppc64le
-              - name: PLATFORM
-                value: $(params.ppc64le-platform)
-          - name: s390x
-            params:
-              - name: IMAGE
-                value: $(params.output-image)-s390x
-              - name: PLATFORM
-                value: $(params.s390x-platform)
+        params:
+          - name: IMAGE
+            value:
+              - "$(params.output-image)-arm64"
+              - "$(params.output-image)-ppc64le"
+              - "$(params.output-image)-s390x"
       params:
         - name: STORAGE_DRIVER
           value: vfs
       workspaces:
         - name: source
           workspace: shared
+    - name: build-image-index
+      runAfter:
+        - build-images
+      taskRef:
+        kind: Task
+        name: buildah
+      params:
+        - name: STORAGE_DRIVER
+          value: vfs
+        - name: IMAGE
+          value: $(params.output-image)
+        - name: SCRIPT
+          value: |
+            buildah manifest create $(params.output-image)
+            buildah manifest add $(params.output-image) docker://$(params.output-image)-arm64
+            buildah manifest add $(params.output-image) docker://$(params.output-image)-ppc64le
+            buildah manifest add $(params.output-image) docker://$(params.output-image)-s390x
+            buildah manifest push --all $(params.output-image) docker://$(params.output-image)
+      workspaces:
+        - name: source
+          workspace: shared
+  results: 
+    - name: IMAGE_URL
+      description: 'URL of the built image'
+      value: $(tasks.build-image-index.results.IMAGE_URL)
+    - name: IMAGE_DIGEST
+      description: 'Digest of the built image'
+      value: $(tasks.build-image-index.results.IMAGE_DIGEST)
+    - name: CHAINS-GIT_URL
+      description: ''
+      value: "$(tasks.git-clone.results.url)"
+    - name: CHAINS-GIT_COMMIT
+      description: ''
+      value: "$(tasks.git-clone.results.commit)"
+   

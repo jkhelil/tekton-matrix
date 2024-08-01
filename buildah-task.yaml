@@ -56,9 +56,6 @@ spec:
   - name: SKIP_PUSH
     description: Skip pushing the built image
     default: "false"
-  - name: PLATFORM
-    description: Target platform for the image build.
-    default: "linux"
   workspaces:
   - name: source
   - name: sslcertdir
@@ -83,15 +80,15 @@ spec:
       buildah ${CERT_DIR_FLAG} --storage-driver=$(params.STORAGE_DRIVER) bud \
         $(params.BUILD_EXTRA_ARGS) --format=$(params.FORMAT) \
         --tls-verify=$(params.TLSVERIFY) --no-cache \
-        -f $(params.DOCKERFILE) -t $(params.IMAGE)-$(params.PLATFORM) $(params.CONTEXT)
+        -f $(params.DOCKERFILE) -t $(params.IMAGE) $(params.CONTEXT)
       [[ "$(params.SKIP_PUSH)" == "true" ]] && echo "Push skipped" && exit 0
       [[ "$(workspaces.dockerconfig.bound)" == "true" ]] && export DOCKER_CONFIG="$(workspaces.dockerconfig.path)"
       buildah ${CERT_DIR_FLAG} --storage-driver=$(params.STORAGE_DRIVER) push \
         $(params.PUSH_EXTRA_ARGS) --tls-verify=$(params.TLSVERIFY) \
-        --digestfile /tmp/image-digest $(params.IMAGE)-$(params.PLATFORM) \
-        docker://$(params.IMAGE)-$(params.PLATFORM)
+        --digestfile /tmp/image-digest $(params.IMAGE) \
+        docker://$(params.IMAGE)
       cat /tmp/image-digest | tee $(results.IMAGE_DIGEST.path)
-      echo "$(params.IMAGE)-$(params.PLATFORM)" | tee $(results.IMAGE_URL.path)
+      echo "$(params.IMAGE)" | tee $(results.IMAGE_URL.path)
     securityContext:
       capabilities:
         add:
